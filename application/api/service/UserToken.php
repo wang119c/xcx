@@ -9,9 +9,11 @@
 namespace app\api\service;
 
 
+use app\api\model\User as UserModel;
+use app\lib\exception\TokenException;
 use app\lib\exception\WechatException;
 
-class UserToken
+class UserToken extends Token
 {
     protected $code;
     protected $wxAppID;
@@ -35,17 +37,59 @@ class UserToken
         } else {
             $loginFail = array_key_exists('errcode', $wxResult);
             if ($loginFail) {
-                $this->processLoginError($wxResult);
+                return $this->processLoginError($wxResult);
             } else {
-                $this->grantToken($wxResult);
+                return $this->grantToken($wxResult);
             }
         }
     }
 
-    private function grantToken($wxResult){
+    private function grantToken($wxResult)
+    {
         $openid = $wxResult['openid'];
-
+        $user = UserModel::getByOpenId($openid);
+        if ($user) {
+            $uid = $user->id;
+        } else {
+            $uid = $this->newUser($openid);
+        }
+        $cachedValue = $this->prepareCachedValue($wxResult, $uid);
+        $token = $this->saveToCache($cachedValue);
+        return $token;
     }
+
+    private function saveToCache($cachedValue)
+    {
+        $key = self::generateToken();
+        $value = json_encode($cachedValue);
+        $expire_in = config('setting.token_expire_in');
+        $request = cache($key, $value, $expire_in);
+        if (!$request) {
+            throw new TokenException([
+                'msg' => '服务器缓存异常',
+                'errorCode' => 10005
+            ]);
+        }
+        return $key;
+    }
+
+    private function prepareCachedValue($wxResult, $uid)
+    {
+        $cachedValue = $wxResult;
+        $cachedValue['uid'] = $uid;
+        $cachedValue['scope'] = 16;
+        return $cachedValue;
+    }
+
+
+    private function newUser($openid)
+    {
+        $user = UserModel::create([
+            'openid' => $openid
+        ]);
+        return $user->id;
+    }
+
 
     private function processLoginError($wxResult)
     {

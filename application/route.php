@@ -21,7 +21,13 @@
 //];
 
 use think\Route;
+
+Route::bind('index');
+Route::domain('m','m');
+Route::domain('api','api');
+//
 Route::rule("v1/banner/:id","api/v1.Banner/getBanner");
 
 //Token
-Route::post('api/:version/token/user', 'api/:version.Token/getToken');
+Route::post(':version/token/user', ':version.Token/getToken');
+Route::post(':version/address/user', ':version.Address/createOrUpdateAddress');
